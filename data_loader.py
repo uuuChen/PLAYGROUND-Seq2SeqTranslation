@@ -29,7 +29,6 @@ class Vocabulary:
         self.word_counts = len(unique_words)
         self.word2idx = dict(zip(unique_words, range(len(unique_words))))
         self.idx2word = dict(zip(range(len(unique_words)), unique_words))
-        self.indices = [self.sequence_to_indices(sequence, add_eos=True) for sequence in self.sequences]
 
     def sequence_to_indices(self, sequence, add_sos=False, add_eos=False):
         indices = list()
@@ -56,18 +55,23 @@ class Vocabulary:
 
 
 class DataLoader:
-    def __init__(self, inputs_file_path, target_file_path, device=None, batch_size=1, shuffle=False):
+    def __init__(self, train_inputs_vocab, train_targets_vocab, inputs_file_path, targets_file_path, device=None,
+                 batch_size=1, shuffle=False):
         self.device = device
         self.num_of_batches = None
         self.batch_size = batch_size
 
-        self.inputs_vocab = Vocabulary(inputs_file_path)
-        self.target_vocab = Vocabulary(target_file_path)
+        self.train_inputs_vocab = train_inputs_vocab
+        self.train_targets_vocab = train_targets_vocab
 
-        self.inputs = self.inputs_vocab.indices
-        self.targets = self.target_vocab.indices
+        self.inputs_sequences = self.get_sequences(inputs_file_path)
+        self.targets_sequences = self.get_sequences(targets_file_path)
 
-        self.PAD_IDX = self.inputs_vocab.word2idx['PAD']
+        self.inputs = [train_inputs_vocab.sequence_to_indices(sequence, add_eos=True) for sequence in self.inputs_sequences]
+        self.targets = [train_targets_vocab.sequence_to_indices(sequence, add_eos=True) for sequence in self.targets_sequences]
+
+        self.SOS_IDX = train_inputs_vocab.word2idx['SOS']
+        self.PAD_IDX = train_inputs_vocab.word2idx['PAD']
 
         if shuffle:
             inputs_targets_list = list(zip(self.inputs, self.targets))
@@ -95,6 +99,16 @@ class DataLoader:
             targets_var = Variable(torch.LongTensor(padded_targets)).transpose(0, 1).to(self.device)  # time * batch
 
             yield inputs_var, targets_var
+
+    @staticmethod
+    def get_sequences(text_file_path):
+        sequences = list()
+        with open(text_file_path, "r", encoding="utf-8-sig") as fp:
+            lines = fp.readlines()
+            for line in lines:
+                sequence = line.strip().split(' ')
+                sequences.append(sequence)
+        return sequences
 
     def _pad_sequences(self, sequences, max_length):
         pad_sequences = list()

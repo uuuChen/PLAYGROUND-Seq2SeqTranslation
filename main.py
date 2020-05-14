@@ -42,18 +42,17 @@ args.device = "cuda" if use_cuda else "cpu"
 ###############################
 # get data loaders
 ###############################
-inputs_vocab = Vocabulary(args.train_input_path)
-targets_vocab = Vocabulary(args.train_target_path)
-train_loader = DataLoader(args.train_input_path, args.train_target_path, shuffle=True, batch_size=args.batch_size, device=args.device)
-val_loader = DataLoader(args.val_input_path, args.val_target_path, shuffle=False, batch_size=args.batch_size, device=args.device)
-sos_idx = train_loader.inputs_vocab.word2idx['SOS']
+train_inputs_vocab = Vocabulary(args.train_input_path)
+train_targets_vocab = Vocabulary(args.train_target_path)
+train_loader = DataLoader(train_inputs_vocab, train_targets_vocab, args.train_input_path, args.train_target_path, shuffle=True, batch_size=args.batch_size, device=args.device)
+val_loader = DataLoader(train_inputs_vocab, train_targets_vocab, args.val_input_path, args.val_target_path, shuffle=False, batch_size=args.batch_size, device=args.device)
 
 
 ###############################
 # get models
 ###############################
-encoder = Encoder(train_loader.inputs_vocab.word_counts, args.encoder_embedded_size, args.encoder_hidden_size).to(args.device)
-decoder = Decoder(train_loader.target_vocab.word_counts, args.decoder_embedded_size, args.decoder_hidden_size, sos_idx, args.teacher_forcing_ratio, args.device).to(args.device)
+encoder = Encoder(train_loader.train_inputs_vocab.word_counts, args.encoder_embedded_size, args.encoder_hidden_size).to(args.device)
+decoder = Decoder(train_loader.train_targets_vocab.word_counts, args.decoder_embedded_size, args.decoder_hidden_size, train_loader.SOS_IDX, args.teacher_forcing_ratio, args.device).to(args.device)
 seq2seq = Seq2Seq(encoder, decoder, args.device)
 
 

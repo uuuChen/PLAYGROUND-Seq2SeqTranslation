@@ -12,7 +12,7 @@ class Trainer(object):
     def train(self, train_loader, val_loader):
         for epoch in range(self.args.epochs):
             self._train_epoch(train_loader, epoch)
-            # self._val_epoch(val_loader)
+            self._val_epoch(val_loader)
 
     def _train_epoch(self, train_loader, epoch):
         self.model.train()
@@ -34,7 +34,7 @@ class Trainer(object):
         losses = AverageMeter()
         for batch, (inputs_var, targets_var) in enumerate(val_loader.get_batch()):
             decoder_outputs = self.model(inputs_var, targets_var)  # decoder_outputs: (ts, bs, output_size)
-            self._show_pair_sequences(decoder_outputs, targets_var, val_loader, show_counts=5)
+            self._show_pair_sequences(inputs_var, targets_var, decoder_outputs, val_loader, show_counts=5)
             loss = self.get_loss(decoder_outputs, targets_var)
             losses.update(loss, count=len(inputs_var))
         print(f'\n* validation loss: {losses.mean:.3f}\n')
@@ -51,9 +51,9 @@ class Trainer(object):
         targets = targets.detach().cpu().numpy().transpose(1, 0)  # (ts, bs) -> (bs, ts)
         outputs = outputs.detach().cpu().numpy().transpose(1, 0, 2)  # (ts, bs, output_size) -> (bs, ts, output_size)
         outputs_indices = np.argmax(outputs, axis=2)
-        ori_src_sequences = data_loader.inputs_vocab.batch_indices_to_batch_sequences(inputs)
-        ori_tar_sequences = data_loader.target_vocab.batch_indices_to_batch_sequences(targets)
-        pred_tar_sequences = data_loader.target_vocab.batch_indices_to_batch_sequences(outputs_indices)
+        ori_src_sequences = data_loader.train_inputs_vocab.batch_indices_to_batch_sequences(inputs)
+        ori_tar_sequences = data_loader.train_targets_vocab.batch_indices_to_batch_sequences(targets)
+        pred_tar_sequences = data_loader.train_targets_vocab.batch_indices_to_batch_sequences(outputs_indices)
         triples_zip = zip(ori_src_sequences, ori_tar_sequences, pred_tar_sequences)
         for counts, (ori_src_seq, ori_tar_seq, pred_tar_seq) in enumerate(triples_zip, start=1):
             print('-' * 25)
