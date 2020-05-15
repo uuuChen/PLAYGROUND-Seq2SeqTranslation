@@ -56,49 +56,67 @@ class Vocabulary:
 
 class DataLoader:
     def __init__(self, train_inputs_vocab, train_targets_vocab, inputs_file_path, targets_file_path, device=None,
-                 batch_size=1, shuffle=False):
+                 batch_size=1, shuffle=False, is_train=False):
         self.device = device
         self.num_of_batches = None
         self.batch_size = batch_size
+        self.is_train = is_train
 
         self.train_inputs_vocab = train_inputs_vocab
         self.train_targets_vocab = train_targets_vocab
 
-        self.inputs_sequences = self.get_sequences(inputs_file_path)
-        self.targets_sequences = self.get_sequences(targets_file_path)
-
-        self.inputs = [train_inputs_vocab.sequence_to_indices(sequence, add_eos=True) for sequence in self.inputs_sequences]
-        self.targets = [train_targets_vocab.sequence_to_indices(sequence, add_eos=True) for sequence in self.targets_sequences]
-
         self.SOS_IDX = train_inputs_vocab.word2idx['SOS']
+        self.EOS_IDX = train_inputs_vocab.word2idx['EOS']
         self.PAD_IDX = train_inputs_vocab.word2idx['PAD']
+        self.UNK_IDX = train_inputs_vocab.word2idx['UNK']
 
-        if shuffle:
-            inputs_targets_list = list(zip(self.inputs, self.targets))
-            random.shuffle(inputs_targets_list)
-            self.inputs, self.targets = zip(*inputs_targets_list)
+        if is_train:
+            self.inputs_sequences = self.get_sequences(inputs_file_path)
+            self.targets_sequences = self.get_sequences(targets_file_path)
 
-        self.inputs_lens = [len(input) for input in self.inputs]
-        self.targets_lens = [len(target) for target in self.targets]
+            self.inputs = [train_inputs_vocab.sequence_to_indices(sequence, add_eos=True) for sequence in self.inputs_sequences]
+            self.targets = [train_targets_vocab.sequence_to_indices(sequence, add_eos=True) for sequence in self.targets_sequences]
 
-        self.batches = [
-            ((self.inputs[k: k + self.batch_size], max(self.inputs_lens[k: k + self.batch_size])),
-             (self.targets[k: k + self.batch_size], max(self.targets_lens[k: k + self.batch_size])))
-            for k in range(0, len(self.inputs), self.batch_size)
-        ]
+            if shuffle:
+                inputs_targets_list = list(zip(self.inputs, self.targets))
+                random.shuffle(inputs_targets_list)
+                self.inputs, self.targets = zip(*inputs_targets_list)
+
+            inputs_lens = [len(input) for input in self.inputs]
+            targets_lens = [len(target) for target in self.targets]
+            self.batches = [
+                ((self.inputs[k: k + self.batch_size], max(inputs_lens[k: k + self.batch_size])),
+                 (self.targets[k: k + self.batch_size], max(targets_lens[k: k + self.batch_size])))
+                for k in range(0, len(self.inputs), self.batch_size)
+            ]
+        else:  # no targets
+            self.inputs_sequences = self.get_sequences(inputs_file_path)
+            self.inputs = [train_inputs_vocab.sequence_to_indices(sequence, add_eos=True) for sequence in self.inputs_sequences]
+            if shuffle:
+                random.shuffle(self.inputs)
+            inputs_lens = [len(input) for input in self.inputs]
+            self.batches = [
+                ((self.inputs[k: k + self.batch_size], max(inputs_lens[k: k + self.batch_size])),
+                 (None, None))
+                for k in range(0, len(self.inputs), self.batch_size)
+            ]
+
         self.num_of_batches = len(self.batches)
 
     def get_batch(self):
         for batch in self.batches:
-            (inputs, max_input_len), (targets, max_target_len) = batch
-
-            padded_inputs = self._pad_sequences(inputs, max_input_len)
-            padded_targets = self._pad_sequences(targets, max_target_len)
-
-            inputs_var = Variable(torch.LongTensor(padded_inputs)).transpose(0, 1).to(self.device)  # time * batch
-            targets_var = Variable(torch.LongTensor(padded_targets)).transpose(0, 1).to(self.device)  # time * batch
-
-            yield inputs_var, targets_var
+            if self.is_train:
+                (inputs, max_input_len), (targets, max_target_len) = batch
+                padded_inputs = self._pad_sequences(inputs, max_input_len)
+                padded_targets = self._pad_sequences(targets, max_target_len)
+                inputs_var = Variable(torch.LongTensor(padded_inputs)).transpose(0, 1).to(self.device)  # time * batch
+                targets_var = Variable(torch.LongTensor(padded_targets)).transpose(0, 1).to(self.device)  # time * batch
+                yield inputs_var, targets_var
+            else:
+                (inputs, max_input_len), _ = batch
+                padded_inputs = self._pad_sequences(inputs, max_input_len)
+                inputs_var = Variable(torch.LongTensor(padded_inputs)).transpose(0, 1).to(self.device)  # time * batch
+                yield inputs_var
 
     @staticmethod
     def get_sequences(text_file_path):
@@ -119,6 +137,10 @@ class DataLoader:
 
 
 if __name__ == '__main__':
-    train_loader = DataLoader('data/train_en.txt', 'data/train_fr.txt', shuffle=True, batch_size=128, device='cuda')
+    train_inputs_path = 'data/train_en.txt'
+    train_targets_path = 'data/train_fr.txt'
+    train_inputs_vocab = Vocabulary(train_inputs_path)
+    train_targets_vocab = Vocabulary(train_targets_path)
+    train_loader = DataLoader(train_inputs_vocab, train_targets_vocab, train_inputs_path, train_targets_path, shuffle=True, batch_size=128, device='cuda', is_train=True)
     for inputs, label in train_loader.get_batch():
         print(inputs.shape, label.shape)

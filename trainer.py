@@ -10,9 +10,15 @@ class Trainer(object):
         self.args = args
 
     def train(self, train_loader, val_loader):
-        for epoch in range(self.args.epochs):
+        for epoch in range(self.args.start_epoch, self.args.epochs):
             self._train_epoch(train_loader, epoch)
             self._val_epoch(val_loader)
+
+    def predict(self, test_loader):
+        self.model.eval()
+        for batch, inputs_var in enumerate(test_loader.get_batch()):
+            decoder_outputs = self.model(inputs_var, None, is_test=True)  # decoder_outputs: (ts, bs, output_size)
+            self._show_test_outputs_to_sequences(inputs_var, decoder_outputs, test_loader, show_counts=len(decoder_outputs))
 
     def _train_epoch(self, train_loader, epoch):
         self.model.train()
@@ -21,7 +27,7 @@ class Trainer(object):
         self.criterion = nn.CrossEntropyLoss(ignore_index=train_loader.PAD_IDX)
         for batch, (inputs_var, targets_var) in enumerate(train_loader.get_batch()):
             decoder_outputs = self.model(inputs_var, targets_var)
-            self._show_pair_sequences(inputs_var, targets_var, decoder_outputs, train_loader, show_counts=5)
+            self._show_train_outputs_to_sequences(inputs_var, targets_var, decoder_outputs, train_loader, show_counts=5)
             loss = self.get_loss(decoder_outputs, targets_var)
             self.optimizer.zero_grad()
             loss.backward()
@@ -34,7 +40,7 @@ class Trainer(object):
         losses = AverageMeter()
         for batch, (inputs_var, targets_var) in enumerate(val_loader.get_batch()):
             decoder_outputs = self.model(inputs_var, targets_var)  # decoder_outputs: (ts, bs, output_size)
-            self._show_pair_sequences(inputs_var, targets_var, decoder_outputs, val_loader, show_counts=5)
+            self._show_train_outputs_to_sequences(inputs_var, targets_var, decoder_outputs, val_loader, show_counts=5)
             loss = self.get_loss(decoder_outputs, targets_var)
             losses.update(loss, count=len(inputs_var))
         print(f'\n* validation loss: {losses.mean:.3f}\n')
@@ -46,7 +52,7 @@ class Trainer(object):
         loss = self.criterion(decoder_outputs, targets)
         return loss
 
-    def _show_pair_sequences(self, inputs, targets, outputs, data_loader, show_counts=1):
+    def _show_train_outputs_to_sequences(self, inputs, targets, outputs, data_loader, show_counts=1):
         inputs = inputs.detach().cpu().numpy().transpose(1, 0)  # (ts, bs) -> (bs, ts)
         targets = targets.detach().cpu().numpy().transpose(1, 0)  # (ts, bs) -> (bs, ts)
         outputs = outputs.detach().cpu().numpy().transpose(1, 0, 2)  # (ts, bs, output_size) -> (bs, ts, output_size)
@@ -59,6 +65,21 @@ class Trainer(object):
             print('-' * 25)
             print(f"original source sequence: {' '.join(ori_src_seq)}")
             print(f"original target sequence: {' '.join(ori_tar_seq)}")
+            print(f"predict  target sequence: {' '.join(pred_tar_seq)}")
+            if counts == show_counts:
+                break
+        print('-' * 50)
+
+    def _show_test_outputs_to_sequences(self, inputs, outputs, test_loader, show_counts=1):
+        inputs = inputs.detach().cpu().numpy().transpose(1, 0)  # (ts, bs) -> (bs, ts)
+        outputs = outputs.detach().cpu().numpy().transpose(1, 0, 2)  # (ts, bs, output_size) -> (bs, ts, output_size)
+        outputs_indices = np.argmax(outputs, axis=2)
+        ori_src_sequences = test_loader.train_inputs_vocab.batch_indices_to_batch_sequences(inputs)
+        pred_tar_sequences = test_loader.train_targets_vocab.batch_indices_to_batch_sequences(outputs_indices)
+        pair_zip = zip(ori_src_sequences, pred_tar_sequences)
+        for counts, (ori_src_seq, pred_tar_seq) in enumerate(pair_zip, start=1):
+            print('-' * 25)
+            print(f"original source sequence: {' '.join(ori_src_seq)}")
             print(f"predict  target sequence: {' '.join(pred_tar_seq)}")
             if counts == show_counts:
                 break
