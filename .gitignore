@@ -1,4 +1,4 @@
 hw4_1_preprocess.py
-__pycache__/
+*__pycache__*
 .idea/
 HW4.pdf
